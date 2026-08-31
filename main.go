@@ -1,12 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
+
+	_ "github.com/lib/pq"
 
 	cmds "github.com/FooNameBar/gator/internal/commands"
 	"github.com/FooNameBar/gator/internal/config"
 	"github.com/FooNameBar/gator/internal/data"
+	"github.com/FooNameBar/gator/internal/database"
 )
 
 func main() {
@@ -16,9 +20,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	state := data.State{Config: &c}
+	db, err := sql.Open("postgres", c.DbUrl)
+	if err != nil {
+		fmt.Printf("Error: sql.Open url: %s, %v\n", c.DbUrl, err)
+		os.Exit(1)
+	}
+
+	dbQueries := database.New(db)
+
+	state := data.State{Config: &c, DB: dbQueries}
 	commands := cmds.Commands{List: make(map[string]func(*data.State, cmds.Command) error)}
+
 	commands.Register("login", cmds.HandlerLogin)
+	commands.Register("register", cmds.HandlerRegister)
+	commands.Register("reset", cmds.HandlerReset)
 
 	if len(os.Args) < 2 {
 		fmt.Println("Error: Not enough arguments. Need a command name and its argument")
@@ -28,7 +43,7 @@ func main() {
 	name, cArgs := os.Args[1], os.Args[2:]
 	err = commands.Run(&state, cmds.Command{Name: name, Args: cArgs})
 	if err != nil {
-		fmt.Print(err)
+		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 }
