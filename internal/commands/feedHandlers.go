@@ -23,17 +23,12 @@ func GetFeeds(s *data.State, cmd Command) error {
 	return nil
 }
 
-func AddFeed(s *data.State, cmd Command) error {
+func AddFeed(s *data.State, cmd Command, user database.User) error {
 	if len(cmd.Args) < 2 {
 		return fmt.Errorf("Need to specify a name and url for a feed")
 	}
 
 	feedname, url := cmd.Args[0], cmd.Args[1]
-	username := s.Config.CurrentUserName
-	user, err := s.DB.GetUser(context.Background(), username)
-	if err != nil {
-		return fmt.Errorf("DB.GetUser: user %s not found: %v\n", feedname, err)
-	}
 
 	feed, err := s.DB.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        uuid.New(),
@@ -48,6 +43,17 @@ func AddFeed(s *data.State, cmd Command) error {
 	}
 
 	fmt.Printf("%v\n", feed)
+
+	_, err = s.DB.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("DB.CreateFeedFollow: %v\n", err)
+	}
 
 	return nil
 }

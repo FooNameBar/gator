@@ -36,8 +36,11 @@ func main() {
 	commands.Register("reset", cmds.HandlerReset)
 	commands.Register("users", cmds.GetUsers)
 	commands.Register("agg", cmds.GetFeeds)
-	commands.Register("addfeed", cmds.AddFeed)
+	commands.Register("addfeed", cmds.MiddlewareLoggedIn(cmds.AddFeed))
 	commands.Register("feeds", cmds.ListFeeds)
+	commands.Register("follow", cmds.MiddlewareLoggedIn(cmds.UserFollowFeed))
+	commands.Register("following", cmds.MiddlewareLoggedIn(cmds.UserFollowing))
+	commands.Register("unfollow", cmds.MiddlewareLoggedIn(cmds.UserUnfollowFeed))
 
 	if len(os.Args) < 2 {
 		fmt.Println("Error: Not enough arguments. Need a command name and its argument")
