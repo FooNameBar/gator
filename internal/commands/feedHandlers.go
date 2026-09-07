@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -13,13 +14,54 @@ import (
 )
 
 func GetFeeds(s *data.State, cmd Command) error {
-
-	feed, err := rss.FetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return fmt.Errorf("rss.FetchFeed: %v\n", err)
+	if len(cmd.Args) < 1 {
+		return fmt.Errorf("Need to specify a time between requests")
 	}
 
-	fmt.Print(feed.String())
+	dur, err := time.ParseDuration(cmd.Args[0])
+	if err != nil {
+		return fmt.Errorf("time.ParseDuration: %v\n", err)
+	}
+	ticker := time.Tick(dur)
+
+	for {
+		<-ticker
+		fmt.Println("Scraping feeds")
+		err = scrapeFeeds(s)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func scrapeFeeds(s *data.State) error {
+	feeds, err := s.DB.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return fmt.Errorf("DB.GetNextFeedToFetch: %v\n", err)
+	}
+
+	var out strings.Builder
+	for _, feed := range feeds {
+		_, err = s.DB.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
+			LastFetchedAt: sql.NullTime{
+				Time:  time.Now(),
+				Valid: true,
+			},
+			UpdatedAt: time.Now(),
+			ID:        feed.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("DB.MarkFeedFetched: %v\n", err)
+		}
+
+		rssFeed, err := rss.FetchFeed(context.Background(), feed.Url)
+		if err != nil {
+			return fmt.Errorf("rss.FetchFeed: %v\n", err)
+		}
+		fmt.Fprintf(&out, "%s\n", rssFeed.String())
+	}
+
+	fmt.Print(out.String())
 	return nil
 }
 
