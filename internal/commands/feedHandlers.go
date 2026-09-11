@@ -77,7 +77,7 @@ func scrapeFeeds(s *data.State) error {
 					String: item.Description,
 					Valid:  true,
 				},
-				PublishedAt: date,
+				PublishedAt: sql.NullTime{Time: date, Valid: true},
 				FeedID:      feed.ID,
 			})
 			if err != nil && !strings.Contains(err.Error(), "duplicate") {
@@ -157,20 +157,24 @@ func ExploreFeedPosts(s *data.State, cmd Command, user database.User) error {
 		return fmt.Errorf("DB.GetPostsForUser: %v\n", err)
 	}
 
+	if len(posts) == 0 {
+		fmt.Println("No posts to browse. Run 'agg' first")
+	}
+
 	var postBldr strings.Builder
 	for _, p := range posts {
+		timeStr := ""
+		if p.PublishedAt.Valid {
+			timeStr = p.PublishedAt.Time.String()
+		}
 		postObj := rss.RSSItem{
 			Title:       p.Title,
 			Link:        p.Url,
 			Description: p.Description.String,
-			PubDate:     p.PublishedAt.String(),
+			PubDate:     timeStr,
 		}
 		fmt.Fprintf(&postBldr, "%s\n", postObj.String())
 	}
-	postStr := postBldr.String()
-	if postStr == "" {
-		postStr = "No posts to browse. Run 'agg' first\n"
-	}
-	fmt.Print(postStr)
+	fmt.Print(postBldr.String())
 	return nil
 }
