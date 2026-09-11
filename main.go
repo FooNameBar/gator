@@ -41,6 +41,7 @@ func main() {
 	commands.Register("follow", cmds.MiddlewareLoggedIn(cmds.UserFollowFeed))
 	commands.Register("following", cmds.MiddlewareLoggedIn(cmds.UserFollowing))
 	commands.Register("unfollow", cmds.MiddlewareLoggedIn(cmds.UserUnfollowFeed))
+	commands.Register("browse", cmds.MiddlewareLoggedIn(cmds.ExploreFeedPosts))
 
 	if len(os.Args) < 2 {
 		fmt.Println("Error: Not enough arguments. Need a command name and its argument")

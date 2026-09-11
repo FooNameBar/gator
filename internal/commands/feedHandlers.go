@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +41,6 @@ func scrapeFeeds(s *data.State) error {
 		return fmt.Errorf("DB.GetNextFeedToFetch: %v\n", err)
 	}
 
-	var out strings.Builder
 	for _, feed := range feeds {
 		_, err = s.DB.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
 			LastFetchedAt: sql.NullTime{
@@ -58,10 +58,34 @@ func scrapeFeeds(s *data.State) error {
 		if err != nil {
 			return fmt.Errorf("rss.FetchFeed: %v\n", err)
 		}
-		fmt.Fprintf(&out, "%s\n", rssFeed.String())
+
+		for _, item := range rssFeed.Channel.Item {
+			date, err := time.Parse(time.RFC1123Z, item.PubDate)
+			if err != nil {
+				// TODO: Add a fallback instead
+				return fmt.Errorf("time.Parse: %v\n", err)
+			}
+
+			fmt.Printf("adding %s to DB\n", item.Link)
+			_, err = s.DB.CreatePost(context.Background(), database.CreatePostParams{
+				ID:        uuid.New(),
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+				Title:     item.Title,
+				Url:       item.Link,
+				Description: sql.NullString{
+					String: item.Description,
+					Valid:  true,
+				},
+				PublishedAt: date,
+				FeedID:      feed.ID,
+			})
+			if err != nil && !strings.Contains(err.Error(), "duplicate") {
+				return fmt.Errorf("DB.CreatePost: %v\n", err)
+			}
+		}
 	}
 
-	fmt.Print(out.String())
 	return nil
 }
 
@@ -112,5 +136,41 @@ func ListFeeds(s *data.State, cmd Command) error {
 	}
 
 	fmt.Print(out.String())
+	return nil
+}
+
+func ExploreFeedPosts(s *data.State, cmd Command, user database.User) error {
+	limit := int32(2)
+	if len(cmd.Args) == 1 {
+		val, err := strconv.ParseInt(cmd.Args[0], 10, 32)
+		if err != nil {
+			return fmt.Errorf("strconv.ParseInt: %s is invalid: %v\n", cmd.Args[0], err)
+		}
+		limit = int32(val)
+	}
+
+	posts, err := s.DB.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  limit,
+	})
+	if err != nil {
+		return fmt.Errorf("DB.GetPostsForUser: %v\n", err)
+	}
+
+	var postBldr strings.Builder
+	for _, p := range posts {
+		postObj := rss.RSSItem{
+			Title:       p.Title,
+			Link:        p.Url,
+			Description: p.Description.String,
+			PubDate:     p.PublishedAt.String(),
+		}
+		fmt.Fprintf(&postBldr, "%s\n", postObj.String())
+	}
+	postStr := postBldr.String()
+	if postStr == "" {
+		postStr = "No posts to browse. Run 'agg' first\n"
+	}
+	fmt.Print(postStr)
 	return nil
 }
